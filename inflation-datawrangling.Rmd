@@ -46,7 +46,7 @@ Hoe dieper het niveau, hoe groter de afwijking?
 
 #weighted average 
 df_cpi %>% 
-  filter(NM_YR == 2021 & NM_MTH == 10 & NM_CD_COICOP_LVL == 2) %>% 
+  filter(NM_YR == 2021 & NM_MTH == 10 & NM_CD_COICOP_LVL == 4) %>% 
    summarize(
       test_idx = weighted.mean(MS_CPI_IDX, MS_WT_CPI)
     )
@@ -192,9 +192,12 @@ new_weights_coicop3 <- recalc_hbs_coicop3 %>%
 
 - Voor productgroepen met sterke seizoenschommelingen worden de jaargemiddelde indexen van 2016 en 2017 gebruikt voor de price update.
 
-- Na deze bewerking volgt tenslotte een herschaling om het totale gewicht opnieuw tot 1000‰ te herleiden."
 
 Voorbeeld: Weight in 2018 = hbs-wt van 2016 * (index van december 2017 / gemiddelde index van 2016)
+
+Voorbeeld: Weight in 2021 = hbs-wt van 2018 * (index van december 2020 / gemiddelde index van 2018)
+
+- Na deze bewerking volgt tenslotte een herschaling om het totale gewicht opnieuw tot 1000‰ te herleiden."
 
 ```{r}
 
@@ -306,6 +309,9 @@ mean(infl_comparisson$abs_diff, na.rm=T)
 
 
 # To-Do
+
+#Inflatie berekenen op coicop1 niveau? 
+Net zoals de algemene inflatie zou je ook de inflatie kunnen berekenen voor coicop1-categorieën. De inflatie van voedingswaren is op dat moment anders voor de verschillende inkomensgroepen
 
 ## Wat is de motor achter de inflatie? 
 
