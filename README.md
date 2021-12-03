@@ -1,3 +1,5 @@
+HBS and CPI data is property of StatBel, the Belgian Office of Statistics. The methodology used the reproduce the inflation is based on earlier reports of NBB (National Bank of Belgium)
+
 Inflation calculations De Tijd © 2021 by De Tijd is licensed under Attribution-NonCommercial-ShareAlike 4.0 International￼ 
 
 
