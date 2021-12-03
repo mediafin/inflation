@@ -1,17 +1,17 @@
 
-This is a public repository by the data team of the Belgian newspaper De Tijd. Using the featured scripts and data we try to take a deep dive in the Belgian inflation figures. The current version is work in progress. The main purpose of the repo is to make our research available for review. 
+This is a public repository by the data team of the Belgian newspaper [De Tijd](https://www.tijd.be). Using the featured scripts and data we try to take a deep dive in the Belgian inflation figures. The current version is a work in progress. The main purpose of this repo is to make our research available for review. 
 
 If you are a researcher willing to provide feedback please contact us directly.
 
 ## Questions for researchers
 
-* In the CPI-dataset, the index per month can’t be reproduced as the weighted mean of the underlying coicop-elements and their weight. Is this due to rounding errors?
+* In the CPI dataset, the monthly index figure can’t be reproduced as the weighted mean of the underlying coicop elements and their weights. Is this purely due to rounding errors?
 
-* What product codes should be in- and excluded from the hbs-data? 
+* What product codes should be included in or excluded from the HBS data? 
 
-In order to produce an inflation figure by income group we understand the need to filter the HBS data from products that aren’t used to calculate the CPI. We are aware of the fact that some corrections made in the the official inflation calculations of StatBel can’t be reproduced as they would need to make use of microdata. Yet NBB defines a selection of products and categories that should be in- and excluded in order to approach the officially published inflation figures as close as possible.
+In order to calculate an inflation figure by income group we understand the need to filter out the HBS data for products that aren’t used to calculate the CPI. We are aware of the fact that some corrections made to the official inflation calculations of StatBel can’t be reproduced as they would need to make use of microdata. Yet NBB defines a selection of products and categories that should be either included or excluded in order to approach the officially published inflation figures as closely as possible.
 
-The list of INCLUDED coicop-levels (including all their child elements) is listed below.
+The list of INCLUDED coicop-levels (including all child elements) is listed below.
 
 | COICOP  | desc                                                                     |
 |---------|--------------------------------------------------------------------------|
@@ -42,27 +42,27 @@ The list of INCLUDED coicop-levels (including all their child elements) is liste
 | CP11    | RESTAURANT EN HORECA                                                     |
 | CP12    | PERSOONLIJKE VERZORGING EN DIENSTEN                                      |
 
-Additionally, We exclude the following products (and their child elements)
+Additionally, we exclude the following products (and their child elements)
 
+| COICOP | desc               |
+|--------|--------------------|
 |     23 | drugs              |
-|-------:|--------------------|
 |    122 | prostitution       |
 |   1251 | life insurance     |
 | 12530B | hospital insurance |
 | 12530C | health insurance   |
 
-Further information about additional corrections that can be made using public available data would be very welcome.
+Further information about additional corrections that can be made using publicly available data would be very welcome.
 
-
-* Do we need to rescale the filtered HBS data (based on categories above) per mille before additional price udpates?
+* Do we need to rescale the filtered HBS data (based on categories above) per mille before additional price updates?
 
 * How do we calculate the price updates correctly? 
 
-We currently load all publicly available HBS-data up to 2012. We update the weights using the followint formula (applied on coicop level 3)
+We currently load all publicly available HBS data from 2012 on. We update the weights using the following formula (applied on coicop level 3)
 
-I.E: Updated weight in 2021 = HBS-weight in 2018 * (index in December 2020 / mean index in 2018). 
+I.E: Updated weight in 2021 = HBS weight in 2018 * (index in December 2020 / mean index in 2018). 
 
-* A further breakdown to coicop4 causes more category names and codes that change over time. Can a price update be done on coicop level 3?
+* A further breakdown to coicop4 causes more category names and codes that change over time. Can an accurate price update be done by sticking to coicop level 3?
 
 * Can we calculate the inflation on coicop level 1 as the weighted average of the deeper coicop levels?
 
@@ -72,7 +72,6 @@ I.E: Updated weight in 2021 = HBS-weight in 2018 * (index in December 2020 / mea
 
 HBS and CPI data is property of StatBel, the Belgian Office of Statistics. The methodology used the reproduce the inflation is based on earlier reports by NBB (National Bank of Belgium)
 
-Inflation calculations De Tijd © 2021 by De Tijd is licensed under Attribution-NonCommercial-ShareAlike 4.0 International￼ 
-
+Inflation calculations De Tijd © 2021 by De Tijd is licensed under Attribution-NonCommercial-ShareAlike 4.0 International
 
 This license requires that reusers give credit to the creator. It allows reusers to distribute, remix, adapt, and build upon the material in any medium or format, for noncommercial purposes only. If others modify or adapt the material, they must license the modified material under identical terms.
