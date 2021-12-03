@@ -17,7 +17,7 @@ options(scipen=999)
 
 # Datawrangling
 
-## Load cpi data
+## 1 Load cpi data
 ```{r}
 
 #Download cpi data
@@ -60,7 +60,7 @@ df_cpi %>%
   
 ```
 
-## Load HBS-data
+## 2 Load HBS-data
 Load data and basic datawrangling for household-survey-data
 ```{r}
 
@@ -129,7 +129,7 @@ df_hbs <- hbs_list %>%
 ```
 
 
-## Rescale HBS-weights by income group
+## 3 Rescale HBS-weights by income group
 https://www.nbb.be/doc/ts/publications/economicreview/2020/ecoreviii2020_h6.pdf 
 (footnote 2 on page 11)
 
@@ -154,13 +154,13 @@ include_query <-  paste0("^(", paste(include_selection$COICOP, collapse = "|"), 
 exclude_query <- paste0("^(", paste(exclude_selection, collapse = "|"), ")")
 
 #get basic product groups selected by nbb
-filtered_hbs_v2 <- df_hbs %>%
+filtered_hbs <- df_hbs %>%
   filter(str_detect(COICOP, include_query)) %>% #apply INCLUDE query
   filter(!str_detect(COICOP, exclude_query)) %>%  #apply EXCLUDE query
   filter(COICOP_LVL == 5) 
     
 #summarize filtered hbs to coicop level 4
-recalc_hbs_coicop3 <- filtered_hbs_v2 %>% 
+recalc_hbs_coicop3 <- filtered_hbs %>% 
   mutate(
     COICOP3_parent = substr(COICOP, 1,4) #get parent coicop level so we can match afterwards
   ) %>% 
@@ -168,13 +168,13 @@ recalc_hbs_coicop3 <- filtered_hbs_v2 %>%
   summarize(value = sum(value, na.rm=T))
 
 # calculate total expenditure by income group
-recalc_group_expenditure_v2 <-  filtered_hbs_v2 %>%
+recalc_group_expenditure <-  filtered_hbs %>%
   group_by(category, hbs_year) %>%
   summarize(recalc_total_group_expenditure = sum(value, na.rm=T))
 
 #calculate relative weights from each product group in relation to total expenditure by income group
 new_weights_coicop3 <- recalc_hbs_coicop3 %>%
-  left_join(recalc_group_expenditure_v2, by=c("category", "hbs_year")) %>%
+  left_join(recalc_group_expenditure, by=c("category", "hbs_year")) %>%
   rename("CD_COICOP" = "COICOP3_parent") %>%
   group_by(CD_COICOP,category, hbs_year ) %>%
     summarize(
@@ -183,7 +183,7 @@ new_weights_coicop3 <- recalc_hbs_coicop3 %>%
 
 ```
 
-## Update weights 
+## 4 Price Update
 
 ### Multiplication factor for price update
 
@@ -259,11 +259,11 @@ df_cpi_for_merge <- df_cpi %>%
   mutate(year = year(date))
   
 #merge rescaled and updated hbs-data with cpi data
-df_merged_cpi_hbs_v2 <- updated_weights_coicop3 %>% 
+df_merged_cpi_hbs <- updated_weights_coicop3 %>% 
   left_join(df_cpi_for_merge, by=c("CD_COICOP", "year"))
 ```
 
-### Reproduce inflation based on rescaled and updated coicop3 weights
+## 5 Reproduce inflation based on rescaled and updated coicop3 weights
 compare total inflation with published statbel figures
 https://statbel.fgov.be/nl/themas/consumptieprijsindex/consumptieprijsindex#panel-14
 ```{r}
@@ -277,7 +277,7 @@ df_published_infl <- df_cpi %>%
   )
 
 #reproduce inflation
-df_inflation_hbs_wt <- df_merged_cpi_hbs_v2 %>% 
+df_inflation_hbs_wt <- df_merged_cpi_hbs %>% 
   group_by(date, category) %>% 
   summarize(
     reproduced_index = weighted.mean(MS_CPI_IDX, updated_wt)
@@ -310,7 +310,7 @@ mean(infl_comparisson$abs_diff, na.rm=T)
 
 # To-Do
 
-#Inflatie berekenen op coicop1 niveau? 
+#Inflation by coicop1
 Net zoals de algemene inflatie zou je ook de inflatie kunnen berekenen voor coicop1-categorieën. De inflatie van voedingswaren is op dat moment anders voor de verschillende inkomensgroepen
 
 ## Wat is de motor achter de inflatie? 
