@@ -9,7 +9,6 @@ output: html_notebook
 library(tidyverse)
 library(lubridate)
 library(readxl)
-library(xlsx)
 
 #no scientific notation of numerals
 options(scipen=999)
@@ -302,7 +301,7 @@ infl_comparisson <- df_inflation_hbs_wt %>%
 infl_comparisson
 
 #average difference between published and reproduced inflation
-mean(infl_comparisson$diff, na.rm=T)
+mean(infl_comparisson$abs_diff, na.rm=T)
 ```
 
 
