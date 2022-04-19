@@ -7,21 +7,20 @@ output: html_notebook
 ```{r}
 
 library(tidyverse)
-library(lubridate)
 library(readxl)
-library(DT)
+library(lubridate) #handling dates
+library(DT) #html tables
 
-#no scientific notation of numerals
+#no scientific notation for numbers
 options(scipen=999)
 
 ```
 
 
-## Load cpi data
+## CPI-data laden
 ```{r}
 
 #Download cpi data (only enable when new download is needed)
-
 #download.file(url='https://statbel.fgov.be/sites/default/files/files/opendata/Indexen%20per%20productgroep/CPI%20All%20groups.xlsx', destfile="data/cpi.xlsx")
 
 #read cpi-data
@@ -45,6 +44,8 @@ df_cpi <- df_cpi_og %>%
 ## Inflatie reproduceren vanuit de publieke data
 ```{r}
 
+#Om de CPI te herrekenen uit gepubliceerde cijfers moet je de indices in basis 2013 telkens unchainen. Dit wil zeggen dat je de indices van het lopende jaar op het laagste niveau telkens moet uitdrukken t.o.v. december van het voorgaande jaar
+
 #make subset with december months of each year
 df_dec_months <- df_cpi %>%
   filter(NM_MTH == 12) %>% 
@@ -54,20 +55,16 @@ df_dec_months <- df_cpi %>%
   select(CD_COICOP, NM_YR, IDX_DEC_Y_MINUS1 = MS_CPI_IDX)
 
 #unchain
-
-#Om de CPI te herrekenen uit gepubliceerde cijfers moet je de indices in basis 2013 telkens unchainen. Dit wil zeggen dat je de indices van het lopende jaar op het laagste niveau telkens moet uitdrukken t.o.v. december van het voorgaande jaar
-
 df_unchained <- df_cpi %>% 
-  select(CD_COICOP, date, NM_YR, NM_MTH, MS_CPI_IDX, MS_WT_CPI, CD_COICOP) %>% 
+  select(CD_COICOP, date, NM_YR, NM_MTH, MS_CPI_IDX, MS_WT_CPI) %>% 
   left_join(df_dec_months, by=c("NM_YR", "CD_COICOP")) %>% 
   mutate(
     MS_CPI_IDX_ADJ = (MS_CPI_IDX / IDX_DEC_Y_MINUS1)*100
   ) 
 
-#aggregate
-
 #Vervolgens dien je deze unchained indices te aggregeren. Het bekomen resultaat kan gekoppeld worden aan de december index uitgedrukt in basis 2013=100. Op deze manier wordt de lange reeks van indexcijfers in basis 2013 = 100  bekomen.
 
+#aggregate
 df_agg_cpi_infl <- df_unchained %>% 
   group_by(date, NM_YR, NM_MTH, CD_COICOP) %>% 
   summarize(
@@ -81,9 +78,8 @@ df_agg_cpi_infl <- df_unchained %>%
 
 ```
 
-## Compare reproduced inflation with published figure 
-Komt exact overeen met statbel
-https://statbel.fgov.be/nl/themas/consumptieprijsindex/consumptieprijsindex#figures
+## Resultaat vergelijken met officieel gepubliceerde cijfers
+Komt overeen met statbel https://statbel.fgov.be/nl/themas/consumptieprijsindex/consumptieprijsindex#figures
 ```{r}
 
 ## official inflation
@@ -111,21 +107,20 @@ compare_infl %>%
 
 ```
 
+# Herbereken inflatie via HBS
+Vanaf hier proberen we de inflatie te herberekenen op basis van de HBS-data. Dat zou moeten toelaten om uitsplitsing te maken naar inkomensniveau
 
-# Link HBS to CPI
-Vanaf hier proberen we de inflatie te herberekenen op basis van de HBS-data. Dat zou moeten toelaten om uitsplitsing te maken naar inkomensniveau, 
-
-## Basic datawrangling for HBS
+### HBS-data laden
 ```{r}
 
-#load hbs data
+#Historische HBS-data binnenhalen
 HBS_inc_2012 <- read_excel("data/HBO-2012-2014-2016.xls", sheet="HBS_Tab03_QRT_BE_2012", range="A5:Q1556")
 HBS_inc_2014 <- read_excel("data/HBO-2012-2014-2016.xls", sheet="HBS_Tab03_QRT_BE_2014", range="A5:Q1556")
 HBS_inc_2016 <- read_excel("data/HBO-2012-2014-2016.xls", sheet="HBS_Tab03_QRT_BE_2016", range="A5:Q1556")
 HBS_inc_2018 <- read_excel("data/HBO-2018.xlsx", sheet="HBS_Tab03_QRT_BE_2018", range="A5:Q1556")
 HBS_inc_2020 <- read_excel("data/HBO-2020.xlsx", sheet="HBS_Tab03_QRT_BE_2020", range="A5:Q1556")
 
-#combine hbs dataframes in a named list
+#Historische datasets bundelen
 hbs_list_og <- list(
   "HBS_inc_2012"= HBS_inc_2012, 
   "HBS_inc_2014"= HBS_inc_2014,
@@ -137,7 +132,7 @@ hbs_list_og <- list(
 #datawrangling for all hbs dataframes in list
 hbs_list <- lapply(seq_along(hbs_list_og), function(i){
   
-  #remove first row and assign current dataframe in loop to variable
+  #remove first row and assign current dataframe to variable
   current_df <- hbs_list_og[[i]][-1, ]
 
   #rename columns
@@ -166,12 +161,11 @@ hbs_list <- lapply(seq_along(hbs_list_og), function(i){
 
   return(current_df)
   
-}) #end of lapply
+}) #end of loop
 
-#merge list of hbs dataframe to one single dataframe
+#merge all historic hbs-dataframes in one single dataframe
 df_hbs <- hbs_list %>%
   bind_rows() %>% 
-  #filter(hbs_year != 2020) %>%  #exclude latest hbs-edition, will only be used starting from 2022
   mutate(
     value = gsub("-", NA, value), #convert blank values to NA
     value = as.numeric(value)
@@ -182,15 +176,13 @@ df_hbs <- hbs_list %>%
 
 ```
 
+## Herschaal HBS-gewichten volgens inkomensgroep
 
-
-## Rescale HBS-weights by income group
-https://www.nbb.be/doc/ts/publications/economicreview/2020/ecoreviii2020_h6.pdf 
-(footnote 2 on page 11)
-
+### Specifieke producten definiëren
 ```{r}
 
-#list of hbs-categories included by nbb
+#list of hbs-categories included by nbb as found on:
+#https://www.nbb.be/doc/ts/publications/economicreview/2020/ecoreviii2020_h6.pdf (footnote 2 on page 11)
 include_selection <- read.csv("data/nbb-level2-products.csv", sep=";", stringsAsFactors = F, colClasses="character")
 
 #additional products to be removed from subset
@@ -202,35 +194,49 @@ exclude_selection <- c(
     "12530C" # health insurance
   )
 
-#create searchquery for all elements included by nbb (and their child elements)
+#create searchquery for all product codes that are INCLUDED by nbb (AND ALL CHILD ELEMENTS!)
 include_query <-  paste0("^(", paste(include_selection$COICOP, collapse = "|"), ")")
      
-#create searchquery for all elements removed by nbb (and their child elements)
+#create searchquery for all product codes that are REMOVED by nbb (AND ALL CHILD ELEMENTS!)
 exclude_query <- paste0("^(", paste(exclude_selection, collapse = "|"), ")")
 
-#get basic product groups selected by nbb
+paste("include all product codes starting with:", include_query)
+
+paste("exclude all product codes starting with:", exclude_query)
+
+```
+
+### Specifieke producten wegfilteren / binnenladen
+```{r}
+
+# include/exclude selection toepassen op hbs data
 filtered_hbs <- df_hbs %>%
   filter(str_detect(COICOP, include_query)) %>% #apply INCLUDE query
   filter(!str_detect(COICOP, exclude_query)) %>%  #apply EXCLUDE query
-  filter(COICOP_LVL == 5) 
+  filter(COICOP_LVL == 5) # Enkel producten op het diepste niveau
     
 #summarize filtered hbs to coicop level 4
-recalc_hbs_coicop3 <- filtered_hbs %>% 
+recalc_hbs <- filtered_hbs %>% 
   mutate(
-    COICOP3_parent = substr(COICOP, 1,2) #get parent coicop level so we can match afterwards
+    `4` = substr(COICOP, 1,5),
+    `3` = substr(COICOP, 1,4),
+    `2` = substr(COICOP, 1,3),
+    `1` = substr(COICOP, 1,2),
+    `0` = "-"
   ) %>% 
-  group_by(COICOP3_parent, category, hbs_year) %>% 
+  gather("coicop_parent_lvl", "coicop_parent", -c(COICOP:COICOP_LVL)) %>% 
+  group_by(coicop_parent, category, hbs_year) %>% 
   summarize(value = sum(value, na.rm=T))
 
-# calculate total expenditure by income group
-recalc_group_expenditure <-  filtered_hbs %>%
+# Totale uitgaven per inkomensgroep
+recalc_group_expenditure <- filtered_hbs %>%
   group_by(category, hbs_year) %>%
   summarize(recalc_total_group_expenditure = sum(value, na.rm=T))
 
 #calculate relative weights from each product group in relation to total expenditure by income group
-new_weights_coicop3 <- recalc_hbs_coicop3 %>%
+new_relative_hbs_weights <- recalc_hbs %>%
   left_join(recalc_group_expenditure, by=c("category", "hbs_year")) %>%
-  rename("CD_COICOP" = "COICOP3_parent") %>%
+  rename("CD_COICOP" = "coicop_parent") %>%
   group_by(CD_COICOP,category, hbs_year ) %>%
     summarize(
     nw_wt = (value / recalc_total_group_expenditure)*1000
@@ -240,7 +246,7 @@ new_weights_coicop3 <- recalc_hbs_coicop3 %>%
 
 ## Price Update
 
-### Multiplication factor for price update
+### Vermenigvuldigingsfactor voor price update
 
 - Om tot het wegingsschema 2018 te komen worden de uitgaven van de gezinnen in 2016 geactualiseerd naar december 2017. Dat gebeurt door de gewichten op het meest gedetailleerde gepubliceerde niveau te vermenigvuldigen met de gemeten prijsevolutie tussen december 2017 en het jaar 2016 
 (dit is de verhouding van de index in december 2017 ten opzichte van de gemiddelde index van 2016). 
@@ -253,17 +259,15 @@ Voorbeeld: Weight in 2021 = hbs-wt van 2018 * (index van december 2020 / gemidde
 
 ```{r}
 
-#mean cpi index in year of hbs publication
-yearly_mean_index_coicop3 <- df_cpi %>% 
-  filter(NM_CD_COICOP_LVL == 1) %>% 
+#Gemiddelde cpi index in jaar van HBS-publicatie
+yearly_mean_index <- df_cpi %>% 
   group_by(CD_COICOP, NM_YR) %>% 
   summarize(mean_cpi_idx_hbs_year = mean(MS_CPI_IDX, na.rm=T)) %>% 
   filter(NM_YR %in% unique(df_hbs$hbs_year)) %>% 
   select(hbs_year = NM_YR, CD_COICOP, mean_cpi_idx_hbs_year)
 
-#cpi index in december of year-1
-idx_dec_coicop3 <- df_cpi %>% 
-  filter(NM_CD_COICOP_LVL == 1) %>% 
+#CPI-index in Year-1
+idx_dec <- df_cpi %>% 
   filter(NM_MTH == 12) %>% 
   filter(NM_YR >= 2012) %>% 
   rename("year_dec_value"="NM_YR") %>% 
@@ -273,9 +277,9 @@ idx_dec_coicop3 <- df_cpi %>%
   ) %>% 
   select(hbs_year, year_dec_value, year_to_update, CD_COICOP, cpi_idx_dec = MS_CPI_IDX) 
 
-#calculate "update" factor
-update_factors_coicop3 <- yearly_mean_index_coicop3 %>% 
-  left_join(idx_dec_coicop3, by=c("hbs_year", "CD_COICOP")) %>% 
+#Bereken "update factor"
+update_factors <- yearly_mean_index %>% 
+  left_join(idx_dec, by=c("hbs_year", "CD_COICOP")) %>% 
   mutate(
     update_factor = cpi_idx_dec / mean_cpi_idx_hbs_year
   ) %>% 
@@ -287,36 +291,33 @@ update_factors_coicop3 <- yearly_mean_index_coicop3 %>%
     
 ```
 
-
-
-### Apply update factor to hbs-weights
-
-- Na deze bewerking volgt tenslotte een herschaling om het totale gewicht opnieuw tot 1000‰ te herleiden."
+### update factor toepassen op hbs-gewicht
 
 ```{r}
-
-updated_weights_coicop3 <- new_weights_coicop3 %>% 
-  left_join(update_factors_coicop3, by=c("CD_COICOP", "hbs_year")) %>% 
+#update factor toepassen
+updated_weights <- new_relative_hbs_weights %>% 
+  left_join(update_factors, by=c("CD_COICOP", "hbs_year")) %>% 
   mutate(updated_wt = nw_wt * update_factor) %>% 
-  filter(!is.na(updated_wt))  %>% 
-  ungroup() %>% 
-  group_by(year_to_update, category) %>%  #rescale to 1000
+  filter(!is.na(updated_wt))
+  
+#Herschalen naar 1000
+updated_and_rescaled_weights <- updated_weights %>% 
+  group_by(year_to_update, category) %>%  
   mutate(
-    total = sum(updated_wt, na.rm=T)
-  ) %>% 
-  ungroup() %>% 
-  mutate(
+    total = max(updated_wt, na.rm=T), #calculate total
     nw_wt = (updated_wt / total)*1000
   ) %>% 
-  select(CD_COICOP, category, year = year_to_update, updated_wt)
+  select(CD_COICOP, category, year = year_to_update, nw_wt) %>% 
+  ungroup()
 
 #make clean copy of original cpi dataframe before merge
 df_cpi_for_merge <- df_cpi %>%
   select(date, NM_YR, NM_MTH, CD_COICOP, NM_CD_COICOP_LVL, MS_CPI_IDX, MS_WT_CPI) 
   
-#merge rescaled and updated hbs-data with cpi data
-df_merged_cpi_hbs <- updated_weights_coicop3 %>% 
+#merge updated and rescaled hbs-data with cpi data
+df_merged_cpi_hbs <- updated_and_rescaled_weights %>% 
   left_join(df_cpi_for_merge, by=c("CD_COICOP", "year" = "NM_YR"))
+  
 
 ```
 
@@ -325,9 +326,9 @@ df_merged_cpi_hbs <- updated_weights_coicop3 %>%
 
 #make subset with december months of each year
 df_dec_months_incomegroup <- df_merged_cpi_hbs %>%
-  filter(NM_MTH == 12) %>% 
+  filter(NM_MTH == 12) %>% #filter all december months
   mutate(
-    NM_YR = year + 1
+    NM_YR = year + 1 #link the december months to y+1
   ) %>% 
   distinct(CD_COICOP, NM_YR, IDX_DEC_Y_MINUS1 = MS_CPI_IDX)
 
@@ -336,7 +337,7 @@ df_dec_months_incomegroup <- df_merged_cpi_hbs %>%
 #Om de CPI te herrekenen uit gepubliceerde cijfers moet je de indices in basis 2013 telkens unchainen. Dit wil zeggen dat je de indices van het lopende jaar op het laagste niveau telkens moet uitdrukken t.o.v. december van het voorgaande jaar
 
 df_unchained_incomegroup <- df_merged_cpi_hbs %>% 
-  select(CD_COICOP, category, date, NM_YR = year, NM_MTH, MS_CPI_IDX, updated_wt) %>% 
+  select(CD_COICOP, date, NM_YR = year, NM_MTH, MS_CPI_IDX, nw_wt, category) %>% 
   left_join(df_dec_months_incomegroup, by=c("NM_YR", "CD_COICOP")) %>% 
   mutate(
     MS_CPI_IDX_ADJ = (MS_CPI_IDX / IDX_DEC_Y_MINUS1)*100
@@ -347,22 +348,25 @@ df_unchained_incomegroup <- df_merged_cpi_hbs %>%
 #Vervolgens dien je deze unchained indices te aggregeren. Het bekomen resultaat kan gekoppeld worden aan de december index uitgedrukt in basis 2013=100. Op deze manier wordt de lange reeks van indexcijfers in basis 2013 = 100  bekomen.
 
 df_agg_cpi_infl_incomegroup <- df_unchained_incomegroup %>% 
-  group_by(date, NM_YR, NM_MTH, CD_COICOP) %>% 
-  mutate(
-    REPRODUCED_INDEX = weighted.mean(MS_CPI_IDX_ADJ, updated_wt) * (weighted.mean(IDX_DEC_Y_MINUS1, updated_wt) / 100)
+  ungroup() %>% 
+  filter(
+    nchar(CD_COICOP) == 2 #we zouden telkens een extra variabele kunnen toevoegen met parent-coicop maar we doen het met 1 subniveau for now...
+  ) %>% 
+  na.omit() %>% #dit is tricky, van waar komen die NA's in first place...?
+  group_by(date, NM_YR, NM_MTH, category) %>% 
+  summarize(
+    REPRODUCED_INDEX = weighted.mean(MS_CPI_IDX_ADJ, nw_wt) * (weighted.mean(IDX_DEC_Y_MINUS1, nw_wt) / 100)
   ) %>% 
   ungroup() %>% 
-  group_by(CD_COICOP, category) %>% 
+  group_by(category) %>% 
   mutate(
-    REPRODUCED_INFL = (REPRODUCED_INDEX / lag(REPRODUCED_INDEX, 12) - 1)*100
-  )
+    REPRODUCED_INFL = round((REPRODUCED_INDEX / lag(REPRODUCED_INDEX, 12) - 1)*100, 2)
+  ) %>% 
+  arrange(desc(date))
 ```
 
 
 # To-Do
-
-#Inflation by coicop1
-Net zoals de algemene inflatie zou je ook de inflatie kunnen berekenen voor coicop1-categorieën. De inflatie van voedingswaren is op dat moment anders voor de verschillende inkomensgroepen
 
 ## Wat is de motor achter de inflatie? 
 
@@ -370,6 +374,7 @@ Net zoals de algemene inflatie zou je ook de inflatie kunnen berekenen voor coic
 - Een impact op de inflatie toont de wijziging op inflatie door het opnemen van die productgroep in de berekening van de CPI. De impact neemt niet alleen het gewicht van de productgroep in rekening, maar ook of de inflatie van de productgroep hoger of lager is dan deze van het geheel aan bestedingen (globale CPI).
 
 Voorbeeld: De hoofdgroep die in november de grootste positieve impact[i] heeft op de inflatie is huisvesting, water en energie met 2,68 procentpunt. De groep voeding en alcoholvrije dranken heeft de grootste negatieve impact uitgeoefend met -1,19 procentpunt.
+
 ```{r}
 #????
 ```
