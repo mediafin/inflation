@@ -381,4 +381,15 @@ compare_infl %>%
   geom_line(data = compare_hbs, aes(x = date, y = REPRODUCED_INFL))
 
 ```
+### Inflatie per inkomensgroep
+```{r}
+
+df_agg_cpi_infl_incomegroup %>% 
+  filter(date >= "2016-01-01") %>% 
+  select(-REPRODUCED_INDEX) %>% 
+  spread(category, REPRODUCED_INFL) %>% 
+  arrange(desc(date))
+
+```
+
 
