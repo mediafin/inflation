@@ -83,7 +83,7 @@ Komt overeen met statbel https://statbel.fgov.be/nl/themas/consumptieprijsindex/
 ```{r}
 
 ## official inflation
-official_indices <- df_cpi %>% 
+official_indices <- df_cpi %>%
   filter(CD_COICOP == "-") %>%
   select(date, NM_MTH, NM_YR, OFFICIAL_IDX = MS_CPI_IDX, OFFICIAL_INFL = MS_CPI_INFL)
 
@@ -99,7 +99,7 @@ compare_infl %>%
   datatable()
 
 #plot both
-compare_infl %>% 
+compare_infl %>%
   select(date, OFFICIAL_INFL, REPRODUCED_INFL) %>% 
   gather(type, value, -c(date, CD_COICOP)) %>% 
   ggplot(aes(x=date, y=value, col=type)) +
@@ -169,10 +169,10 @@ df_hbs <- hbs_list %>%
   mutate(
     value = gsub("-", NA, value), #convert blank values to NA
     value = as.numeric(value)
-  ) %>% 
-  filter(indicator == "mean_exp") %>% #only variable of interest is the mean expenditure
+  ) %>%
   filter(!is.na(desc)) %>% #remove empty rows and metadata
-  mutate(COICOP_LVL = nchar(COICOP) - 1) #add variable to identify coicop-level
+  mutate(COICOP_LVL = nchar(COICOP) - 1) %>% #add variable to identify coicop-level
+  filter(indicator == "mean_exp")
 
 ```
 
@@ -238,7 +238,7 @@ new_relative_hbs_weights <- recalc_hbs %>%
   left_join(recalc_group_expenditure, by=c("category", "hbs_year")) %>%
   rename("CD_COICOP" = "coicop_parent") %>%
   group_by(CD_COICOP,category, hbs_year ) %>%
-    summarize(
+  summarize(
     nw_wt = (value / recalc_total_group_expenditure)*1000
   )
 
@@ -297,7 +297,7 @@ update_factors <- yearly_mean_index %>%
 #update factor toepassen
 updated_weights <- new_relative_hbs_weights %>% 
   left_join(update_factors, by=c("CD_COICOP", "hbs_year")) %>% 
-  mutate(updated_wt = nw_wt * update_factor) %>% 
+  mutate(updated_wt = nw_wt * update_factor) %>%
   filter(!is.na(updated_wt))
   
 #Herschalen naar 1000
@@ -352,7 +352,6 @@ df_agg_cpi_infl_incomegroup <- df_unchained_incomegroup %>%
   filter(
     nchar(CD_COICOP) == 2 #we zouden telkens een extra variabele kunnen toevoegen met parent-coicop maar we doen het met 1 subniveau for now...
   ) %>% 
-  na.omit() %>% #dit is tricky, van waar komen die NA's in first place...?
   group_by(date, NM_YR, NM_MTH, category) %>% 
   summarize(
     REPRODUCED_INDEX = weighted.mean(MS_CPI_IDX_ADJ, nw_wt) * (weighted.mean(IDX_DEC_Y_MINUS1, nw_wt) / 100)
@@ -363,28 +362,23 @@ df_agg_cpi_infl_incomegroup <- df_unchained_incomegroup %>%
     REPRODUCED_INFL = round((REPRODUCED_INDEX / lag(REPRODUCED_INDEX, 12) - 1)*100, 2)
   ) %>% 
   arrange(desc(date))
+
 ```
 
-
-# To-Do
-
-## Wat is de motor achter de inflatie? 
-
-### Impact op inflatie
-- Een impact op de inflatie toont de wijziging op inflatie door het opnemen van die productgroep in de berekening van de CPI. De impact neemt niet alleen het gewicht van de productgroep in rekening, maar ook of de inflatie van de productgroep hoger of lager is dan deze van het geheel aan bestedingen (globale CPI).
-
-Voorbeeld: De hoofdgroep die in november de grootste positieve impact[i] heeft op de inflatie is huisvesting, water en energie met 2,68 procentpunt. De groep voeding en alcoholvrije dranken heeft de grootste negatieve impact uitgeoefend met -1,19 procentpunt.
-
+## Resultaat vergelijken
 ```{r}
-#????
-```
 
+compare_hbs <- df_agg_cpi_infl_incomegroup %>% 
+  filter(date >= "2016-01-01" & category == "TOTAL")
 
-### Bijdrage tot inflatie
-De bijdrage tot de inflatie van een bepaalde productgroep geeft weer hoeveel van de verandering van de totale bestedingen te wijten is aan de prijsverandering van deze productgroep.
+#plot both
+compare_infl %>%
+  select(date, OFFICIAL_INFL, REPRODUCED_INFL) %>% 
+  gather(type, value, -c(date, CD_COICOP)) %>% 
+  filter(date >= "2016-01-01") %>% 
+  ggplot() +
+  geom_line(aes(x=date, y=value, col=type), alpha=0.5) +
+  geom_line(data = compare_hbs, aes(x = date, y = REPRODUCED_INFL))
 
-Voorbeeld: De hoofdgroep met de grootste bijdrage[ii] tot de inflatie is huisvesting, water en energie met 3,19 procentpunt. De laagste bijdrage tot de inflatie wordt gerealiseerd door communicatie met 0,00 procentpunt.
-```{r}
-#????
 ```
 
