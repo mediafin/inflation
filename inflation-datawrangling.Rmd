@@ -268,7 +268,7 @@ Gewicht van getuige in HBS 2016 * [ (Index per getuige in december 2017 / Index 
 "Ongeveer 80 % (= ruwe schatting) van het laagste inkomenskwartiel heeft recht op het sociaal tarief, en de tarieven daarvan zijn veel minder gestegen dan de commerciële tarieven. Die groep tekent dus een lagere inflatie op (zie sheet “Q25 _sociaal tarief”). Hiervoor heb ik mijn index voor elektriciteit en gas (sociaal tarief) zélf berekend, op basis van tarieven van sociaal tarief gepubliceerd door de CREG. De overige 20 % van het laagste inkomenskwartiel betaalt het commercieel tarief, dus die groep is het hardst getroffen door inflatie.
 Dus, in alle sheets, behalve “totaal” en “Q25_sociaal tarief” gebruik ik dan ook mijn eigen berekende index voor het pure commercieel tarief (dit op basis van de totale gepubliceerde index en mijn index voor sociaal tarief). Alleen in de sheet “totaal” (waar ik de totale inflatie reproduceer, en ik mijn resultaat vergelijk met dat van statbel) gebruik ik de officiële totale index voor gas en elektriciteit (wat een gewogen gemiddelde is van de commerciële index en de index met sociaal tarief)."
 
-# Gans de inflatieberekening
+# Inflatiebrekening per inkomensgroep
 
 ```{r}
 
