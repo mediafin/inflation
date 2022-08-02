@@ -3,15 +3,22 @@ This is a public repository by the data team of the Belgian newspaper [De Tijd](
 
 If you are a researcher willing to provide feedback please contact us directly.
 
-## Questions for researchers
+## Step 1
 
-* In the CPI dataset, the monthly index figure can’t be reproduced as the weighted mean of the underlying coicop elements and their weights. Is this purely due to rounding errors?
+We were able to reproduce the officially published inflation figure (see the script from line 20 to 108). In this code we unchain and aggregate the indices. 
 
-* What product codes should be included in or excluded from the HBS data? 
+
+## Step 2
+In line 113 till 177 we lwe load and clean the historical hbs data from 2012 until 2020. 
+
+
+## Step 3
+From line 182 until 207 we include and exclude certain product groups as provided in the methodology of NBB
 
 In order to calculate an inflation figure by income group we understand the need to filter out the HBS data for products that aren’t used to calculate the CPI. We are aware of the fact that some corrections made to the official inflation calculations of StatBel can’t be reproduced as they would need to make use of microdata. Yet NBB defines a selection of products and categories that should be either included or excluded in order to approach the officially published inflation figures as closely as possible.
 
 The list of INCLUDED coicop-levels (including all child elements) is listed below.
+
 
 | COICOP  | desc                                                                     |
 |---------|--------------------------------------------------------------------------|
@@ -65,6 +72,17 @@ I.E: Updated weight in 2021 = HBS weight in 2018 * (index in December 2020 / mea
 * A further breakdown to coicop4 causes more category names and codes that change over time. Can an accurate price update be done by sticking to coicop level 3?
 
 * Can we calculate the inflation on coicop level 1 as the weighted average of the deeper coicop levels?
+
+## Step 4: 
+
+From line 218 to 245 we rebuild the hbs-weights after we filtered specific product codes
+
+## Step 5: Price Update
+
+Starting from line 260 we pdate the weights according the the methology provided by statbel. 
+
+
+
 
 -------
 

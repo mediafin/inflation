@@ -16,7 +16,6 @@ options(scipen=999)
 
 ```
 
-
 ## CPI-data laden
 ```{r}
 
@@ -43,8 +42,6 @@ df_cpi <- df_cpi_og %>%
 
 ## Inflatie reproduceren vanuit de publieke data
 ```{r}
-
-#Om de CPI te herrekenen uit gepubliceerde cijfers moet je de indices in basis 2013 telkens unchainen. Dit wil zeggen dat je de indices van het lopende jaar op het laagste niveau telkens moet uitdrukken t.o.v. december van het voorgaande jaar
 
 #make subset with december months of each year
 df_dec_months <- df_cpi %>%
@@ -118,7 +115,7 @@ HBS_inc_2012 <- read_excel("data/HBO-2012-2014-2016.xls", sheet="HBS_Tab03_QRT_B
 HBS_inc_2014 <- read_excel("data/HBO-2012-2014-2016.xls", sheet="HBS_Tab03_QRT_BE_2014", range="A5:Q1556")
 HBS_inc_2016 <- read_excel("data/HBO-2012-2014-2016.xls", sheet="HBS_Tab03_QRT_BE_2016", range="A5:Q1556")
 HBS_inc_2018 <- read_excel("data/HBO-2018.xlsx", sheet="HBS_Tab03_QRT_BE_2018", range="A5:Q1556")
-HBS_inc_2020 <- read_excel("data/HBO-2020.xlsx", sheet="HBS_Tab03_QRT_BE_2020", range="A5:Q1556")
+HBS_inc_2020 <- HBS_inc_2018
 
 #Historische datasets bundelen
 hbs_list_og <- list(
@@ -216,17 +213,18 @@ filtered_hbs <- df_hbs %>%
   filter(COICOP_LVL == 5) # Enkel producten op het diepste niveau
     
 #summarize filtered hbs to coicop level 4
-recalc_hbs <- filtered_hbs %>% 
+recalc_hbs <- filtered_hbs  %>%
   mutate(
     `4` = substr(COICOP, 1,5),
     `3` = substr(COICOP, 1,4),
     `2` = substr(COICOP, 1,3),
     `1` = substr(COICOP, 1,2),
     `0` = "-"
-  ) %>% 
-  gather("coicop_parent_lvl", "coicop_parent", -c(COICOP:COICOP_LVL)) %>% 
-  group_by(coicop_parent, category, hbs_year) %>% 
-  summarize(value = sum(value, na.rm=T))
+  ) %>%
+  gather("coicop_parent_lvl", "coicop_parent", -c(COICOP:COICOP_LVL)) %>%
+  group_by(coicop_parent, category, hbs_year) %>%
+  summarize(value = sum(value, na.rm=T)) %>% 
+  filter(coicop_parent %in% include_selection$COICOP)
 
 # Totale uitgaven per inkomensgroep
 recalc_group_expenditure <- filtered_hbs %>%
@@ -239,7 +237,7 @@ new_relative_hbs_weights <- recalc_hbs %>%
   rename("CD_COICOP" = "coicop_parent") %>%
   group_by(CD_COICOP,category, hbs_year ) %>%
     summarize(
-    nw_wt = (value / recalc_total_group_expenditure)*1000
+    wt_rescaled_inc_group = (value / recalc_total_group_expenditure)*1000
   )
 
 ```
@@ -257,114 +255,182 @@ Voorbeeld: Weight in 2018 = hbs-wt van 2016 * (index van december 2017 / gemidde
 
 Voorbeeld: Weight in 2021 = hbs-wt van 2018 * (index van december 2020 / gemiddelde index van 2018)
 
+Nationale bank doet precies iets anders:
+
+JJ (NBB): "Heb het even opgezocht op de website van Statbel: de formule is correct. Ik heb het iets anders gedaan (wij streven enkel een benadering na):
+
+Gewicht van getuige in HBS 2016 * [ (Index per getuige in december 2017 / Index per getuige in december 2016) / (Totale index in december 2017 / Totale index in december 2016) ]
+
+"Ik deel door de totale index om een totaal gewicht van 1000 te bekomen."
+
+--> Reproductie van totale inflatie is gelukt MAAR uitsplitsing naar inkomensgroep kon niet worden gedaan op basis van de beschikbare informatie. Dat komt omdat Jonckheere hier gebruik maakt van een eigen index voor gas en elektriciteit als vertrekpunt. Ze zegt daarover: 
+
+"Ongeveer 80 % (= ruwe schatting) van het laagste inkomenskwartiel heeft recht op het sociaal tarief, en de tarieven daarvan zijn veel minder gestegen dan de commerciële tarieven. Die groep tekent dus een lagere inflatie op (zie sheet “Q25 _sociaal tarief”). Hiervoor heb ik mijn index voor elektriciteit en gas (sociaal tarief) zélf berekend, op basis van tarieven van sociaal tarief gepubliceerd door de CREG. De overige 20 % van het laagste inkomenskwartiel betaalt het commercieel tarief, dus die groep is het hardst getroffen door inflatie.
+Dus, in alle sheets, behalve “totaal” en “Q25_sociaal tarief” gebruik ik dan ook mijn eigen berekende index voor het pure commercieel tarief (dit op basis van de totale gepubliceerde index en mijn index voor sociaal tarief). Alleen in de sheet “totaal” (waar ik de totale inflatie reproduceer, en ik mijn resultaat vergelijk met dat van statbel) gebruik ik de officiële totale index voor gas en elektriciteit (wat een gewogen gemiddelde is van de commerciële index en de index met sociaal tarief)."
+
+# Gans de inflatieberekening
+
 ```{r}
 
-#Gemiddelde cpi index in jaar van HBS-publicatie
-yearly_mean_index <- df_cpi %>% 
-  group_by(CD_COICOP, NM_YR) %>% 
-  summarize(mean_cpi_idx_hbs_year = mean(MS_CPI_IDX, na.rm=T)) %>% 
-  filter(NM_YR %in% unique(df_hbs$hbs_year)) %>% 
-  select(hbs_year = NM_YR, CD_COICOP, mean_cpi_idx_hbs_year)
+#make empty list
+testlist <- list()
 
-#CPI-index in Year-1
-idx_dec <- df_cpi %>% 
+category <- c("Q1", "Q2", "Q3", "Q4", "TOTAL")
+base_index <- c(100, 100, 100, 100, 100)
+df_startindex <- data.frame(category, base_index)
+
+#basic variables
+testlist[["2017"]][["new_index_dec_y-1"]] <- df_startindex
+
+testlist[["2017"]][["cpi"]] <- df_cpi %>%
+  filter(CD_COICOP %in% include_selection$COICOP) %>%
+  filter(NM_YR == 2017) %>%
+  select(CD_COICOP, date, MS_CPI_IDX, NM_YR)
+
+testlist[["2017"]][["dec_cpi"]] <- df_cpi %>% 
+  filter(NM_YR == 2017) %>% 
   filter(NM_MTH == 12) %>% 
-  filter(NM_YR >= 2012) %>% 
   rename("year_dec_value"="NM_YR") %>% 
   mutate(
-    hbs_year = ifelse(year_dec_value %% 2, year_dec_value - 1, year_dec_value - 2),
     year_to_update = year_dec_value  + 1
   ) %>% 
-  select(hbs_year, year_dec_value, year_to_update, CD_COICOP, cpi_idx_dec = MS_CPI_IDX) 
+  select(year_dec_value, year_to_update, CD_COICOP, cpi_idx_dec = MS_CPI_IDX) %>% 
+  filter(CD_COICOP != "-")
 
-#Bereken "update factor"
-update_factors <- yearly_mean_index %>% 
-  left_join(idx_dec, by=c("hbs_year", "CD_COICOP")) %>% 
+# VARIABLES FOR STARTYEAR
+
+#STEP 1: GET CPI PER PRODUCT
+testlist[["2018"]][["cpi"]] <- df_cpi %>%
+filter(NM_YR == 2018) %>%  
+filter(CD_COICOP %in% include_selection$COICOP) %>%
+  select(CD_COICOP, date, MS_CPI_IDX, NM_YR)
+
+#STEP 2: GET WEIGHTS
+testlist[["2018"]][["weights"]] <- new_relative_hbs_weights %>% 
+  filter(hbs_year == 2018)
+
+#STEP 3: Evolutiescore tegenover december_year_minus_one
+testlist[["2018"]][["cpi_evo"]] <- testlist[["2018"]][["cpi"]] %>% 
+  left_join(testlist[["2017"]][["dec_cpi"]], by=c("NM_YR" = "year_to_update", "CD_COICOP")) %>% 
+  group_by(CD_COICOP) %>%
   mutate(
-    update_factor = cpi_idx_dec / mean_cpi_idx_hbs_year
-  ) %>% 
-  select(CD_COICOP, hbs_year, year_dec_value, year_to_update, update_factor ) %>% 
-  mutate(
-    hbs_year = as.numeric(hbs_year),
-    year_dec_value = as.numeric(year_dec_value)
+    factor = MS_CPI_IDX / cpi_idx_dec
   )
+  
+#STEP 4: Gewogen gemiddelde per datum volgens coicop-gewichten
+testlist[["2018"]][["weighted_means"]] <- testlist[["2018"]][["cpi_evo"]] %>% 
+  left_join(testlist[["2018"]][["weights"]], by=c("NM_YR" = "hbs_year", "CD_COICOP")) %>%
+  group_by(category, date) %>%
+  summarize(weighted_factor = weighted.mean(factor,wt_rescaled_inc_group)) %>% 
+  ungroup() %>% 
+  filter(!is.na(category))
+
+View(testlist[["2018"]][["weighted_means"]])
+
+#STEP 5: nieuwe cpi-index berekenen
+testlist[["2018"]][["new_index"]] <- testlist[["2018"]][["weighted_means"]] %>% 
+  left_join(testlist[["2017"]][["new_index_dec_y-1"]], by=c("category")) %>% 
+  mutate(
+    new_index = base_index*weighted_factor
+    )
+
+# VARIABLES FOR EACH CONSECUTIVE YEAR
+
+for(curr_year in c(2019, 2020, 2021, 2022)){
     
-```
-
-### update factor toepassen op hbs-gewicht
-
-```{r}
-#update factor toepassen
-updated_weights <- new_relative_hbs_weights %>% 
-  left_join(update_factors, by=c("CD_COICOP", "hbs_year")) %>% 
-  mutate(updated_wt = nw_wt * update_factor) %>% 
-  filter(!is.na(updated_wt))
+  ## STEP 1: GET CPI PER PRODUCT
+  testlist[[paste(curr_year)]][["cpi"]] <- df_cpi %>%
+  filter(NM_YR == curr_year) %>%  
+  filter(CD_COICOP %in% include_selection$COICOP) %>%
+    select(CD_COICOP, date, MS_CPI_IDX, NM_YR)
   
-#Herschalen naar 1000
-updated_and_rescaled_weights <- updated_weights %>% 
-  group_by(year_to_update, category) %>%  
+  ## STEP 2: UPDATE WEIGHTS
+  
+  ### coicop cpi-index of dec y-1
+  coicop_cpi_dec_y_minus1 <- testlist[[paste(curr_year - 1)]][["cpi"]] %>% 
+    filter(month(date) == 12) %>% 
+    mutate(year = year(date)) %>% 
+    select(CD_COICOP, coicop_cpi_dec_y_minus1 = MS_CPI_IDX, year)
+  
+  ### avg coicop-cpi-index of 2018
+  avg_coicop_cpi_y_minus1 <- testlist[["2018"]][["cpi"]] %>% 
+    group_by(CD_COICOP) %>% 
+    summarize(avg_coicop_cpi_y_minus1 = mean(MS_CPI_IDX, na.rm=T))
+  
+  ### new idx of dec y-1
+  new_idx_dec_y_minus1 <- testlist[[paste(curr_year - 1)]][["new_index"]] %>% 
+    filter(month(date) == 12) %>% 
+    mutate(year = year(date)) %>% 
+    select(category, year, new_idx_dec_y_minus1 = new_index) 
+  
+  ### avg new idx of 2018
+  avg_new_idx_y_minus1 <- testlist[["2018"]][["new_index"]] %>% 
+    group_by(category) %>% 
+    summarize(avg_new_idx_y_minus1 = mean(new_index, na.rm=T))
+  
+  ### calculate update factors
+  update_factors <- coicop_cpi_dec_y_minus1 %>% 
+    left_join(avg_coicop_cpi_y_minus1, c("CD_COICOP")) %>% 
+    left_join(new_idx_dec_y_minus1, "year") %>% 
+    left_join(avg_new_idx_y_minus1, c("category")) %>% 
+    select(CD_COICOP, year, category, everything()) %>% 
+    ungroup() %>% 
+    group_by(category, CD_COICOP) %>% 
+    summarize(
+      update_factor = (coicop_cpi_dec_y_minus1 / avg_coicop_cpi_y_minus1) / (new_idx_dec_y_minus1 / avg_new_idx_y_minus1),
+      year = curr_year + 1
+    ) 
+  
+  ### apply update factors
+  testlist[[paste(curr_year)]][["weights"]] <- testlist[["2018"]][["weights"]] %>% 
+    left_join(update_factors, by=c("CD_COICOP", "category")) %>% 
+    mutate(
+      new_weight = wt_rescaled_inc_group*update_factor
+    ) %>% 
+    select(CD_COICOP, category, new_weight)
+  
+  
+  #STEP 3: Evolutiescore tegenover december_year_minus_one
+  testlist[[paste(curr_year) ]][["cpi_evo"]] <- testlist[[paste(curr_year)]][["cpi"]] %>% 
+    left_join(coicop_cpi_dec_y_minus1 %>% mutate(year_to_update = year + 1), by=c("NM_YR" = "year_to_update", "CD_COICOP")) %>% 
+    group_by(CD_COICOP) %>%
+    mutate(
+      factor = MS_CPI_IDX / coicop_cpi_dec_y_minus1
+    ) %>% 
+    select(CD_COICOP, date, factor)
+  
+  #STEP 4: Gewogen gemiddelde per datum volgens coicop-gewichten
+  testlist[[paste(curr_year)]][["weighted_means"]] <- testlist[[paste(curr_year)]][["cpi_evo"]] %>% 
+    left_join(testlist[[paste(curr_year)]][["weights"]], by=c("CD_COICOP")) %>%
+    group_by(category, date) %>%
+    summarize(weighted_factor = weighted.mean(factor, new_weight)) %>% 
+    ungroup() %>% 
+    filter(!is.na(category))
+  
+  #STEP 5: nieuwe cpi-index berekenen
+  testlist[[paste(curr_year)]][["new_index"]] <- testlist[[paste(curr_year)]][["weighted_means"]] %>% 
+    left_join(
+      testlist[[paste(curr_year - 1)]][["new_index"]] %>% 
+        filter(month(date) == 12) %>% 
+        select(category, base_index = new_index), 
+      by=c("category")
+      ) %>% 
+    mutate(
+      new_index = base_index*weighted_factor
+      )
+  
+  #STEP 6: calculate inflation
+  testlist[[paste(curr_year)]][["inflation"]] <- testlist[[paste(curr_year - 1)]][["new_index"]] %>% 
+    bind_rows(testlist[[paste(curr_year)]][["new_index"]]) %>% 
+    group_by(category) %>% 
   mutate(
-    total = max(updated_wt, na.rm=T), #calculate total
-    nw_wt = (updated_wt / total)*1000
+    inflation = (new_index / lag(new_index, 12) - 1)*100
   ) %>% 
-  select(CD_COICOP, category, year = year_to_update, nw_wt) %>% 
-  ungroup()
+    filter(year(date) == curr_year)
 
-#make clean copy of original cpi dataframe before merge
-df_cpi_for_merge <- df_cpi %>%
-  select(date, NM_YR, NM_MTH, CD_COICOP, NM_CD_COICOP_LVL, MS_CPI_IDX, MS_WT_CPI) 
-  
-#merge updated and rescaled hbs-data with cpi data
-df_merged_cpi_hbs <- updated_and_rescaled_weights %>% 
-  left_join(df_cpi_for_merge, by=c("CD_COICOP", "year" = "NM_YR"))
-  
+} #end of loop
 
 ```
-
-## Inflatie berekenen per inkomensgroep
-```{r}
-
-#make subset with december months of each year
-df_dec_months_incomegroup <- df_merged_cpi_hbs %>%
-  filter(NM_MTH == 12) %>% #filter all december months
-  mutate(
-    NM_YR = year + 1 #link the december months to y+1
-  ) %>% 
-  distinct(CD_COICOP, NM_YR, IDX_DEC_Y_MINUS1 = MS_CPI_IDX)
-
-#unchain
-
-#Om de CPI te herrekenen uit gepubliceerde cijfers moet je de indices in basis 2013 telkens unchainen. Dit wil zeggen dat je de indices van het lopende jaar op het laagste niveau telkens moet uitdrukken t.o.v. december van het voorgaande jaar
-
-df_unchained_incomegroup <- df_merged_cpi_hbs %>% 
-  select(CD_COICOP, date, NM_YR = year, NM_MTH, MS_CPI_IDX, nw_wt, category) %>% 
-  left_join(df_dec_months_incomegroup, by=c("NM_YR", "CD_COICOP")) %>% 
-  mutate(
-    MS_CPI_IDX_ADJ = (MS_CPI_IDX / IDX_DEC_Y_MINUS1)*100
-  ) 
-
-#aggregate
-
-#Vervolgens dien je deze unchained indices te aggregeren. Het bekomen resultaat kan gekoppeld worden aan de december index uitgedrukt in basis 2013=100. Op deze manier wordt de lange reeks van indexcijfers in basis 2013 = 100  bekomen.
-
-df_agg_cpi_infl_incomegroup <- df_unchained_incomegroup %>% 
-  ungroup() %>% 
-  filter(
-    nchar(CD_COICOP) == 2 #we zouden telkens een extra variabele kunnen toevoegen met parent-coicop maar we doen het met 1 subniveau for now...
-  ) %>% 
-  na.omit() %>% #dit is tricky, van waar komen die NA's in first place...?
-  group_by(date, NM_YR, NM_MTH, category) %>% 
-  summarize(
-    REPRODUCED_INDEX = weighted.mean(MS_CPI_IDX_ADJ, nw_wt) * (weighted.mean(IDX_DEC_Y_MINUS1, nw_wt) / 100)
-  ) %>% 
-  ungroup() %>% 
-  group_by(category) %>% 
-  mutate(
-    REPRODUCED_INFL = round((REPRODUCED_INDEX / lag(REPRODUCED_INDEX, 12) - 1)*100, 2)
-  ) %>% 
-  arrange(desc(date))
-```
-
 
 # To-Do
 
@@ -385,6 +451,61 @@ De bijdrage tot de inflatie van een bepaalde productgroep geeft weer hoeveel van
 
 Voorbeeld: De hoofdgroep met de grootste bijdrage[ii] tot de inflatie is huisvesting, water en energie met 3,19 procentpunt. De laagste bijdrage tot de inflatie wordt gerealiseerd door communicatie met 0,00 procentpunt.
 ```{r}
-#????
+
+export_bijdragen <- read_excel("data/Bijdragen - De Tijd - 28072022.xlsx") %>% 
+  gather(date, value, -TX_DESCR_NL) %>% 
+  mutate(date = as.Date(as.numeric(date), origin = "1899-12-30")) %>% 
+  filter(!TX_DESCR_NL %in% c("Huisvesting, water, elektriciteit, gas en andere brandstoffen", "Vervoer")) %>% 
+  mutate(
+    TX_DESCR_NL = ifelse(TX_DESCR_NL %in% c("Gezondheid", "Communicatie", "Onderwijs", "Kleding en schoeisel", "Alcoholische dranken en tabak", "Diverse goederen en diensten" ), "Andere", TX_DESCR_NL)
+  ) %>% 
+  group_by(date, TX_DESCR_NL) %>% 
+  summarize(value = sum(value, na.rm=T)) %>% 
+  ungroup()
+
+inflatiecijfer <- export_bijdragen %>% 
+  filter(TX_DESCR_NL == "Consumptieprijsindex inflatie") %>% 
+  mutate(value = round(value * 100, 2) )
+
+export_bijdragen <- export_bijdragen %>% 
+  filter(TX_DESCR_NL != "Consumptieprijsindex inflatie") %>% 
+  filter(date >= ymd("2021-01-01"))
+
+#define order for categories
+
+export_bijdragen %>% 
+  mutate(value = value*100) %>% 
+  arrange(desc(date)) %>% 
+  spread(date, value) %>% 
+  googlesheets4::sheet_write("https://docs.google.com/spreadsheets/d/1xhMj-7nXC7AvLWlJRb3scloc0a3kNBfFV9uHYjB4DyA/edit#gid=842074501")
+
+latest_top_bijdragen <- export_bijdragen %>% 
+  filter(date == max(date)) %>% 
+  mutate(value = value*100) %>% 
+  arrange(desc(value))
+
+latest_top_bijdragen <- latest_top_bijdragen[c(1, 4, 2, 3, 6:9, 5), ]
+
+bijdrage_plot <- ggplot() +
+ geom_bar(data = export_bijdragen %>% filter(value >= 0) %>% mutate(TX_DESCR_NL = factor(TX_DESCR_NL, levels=rev(latest_top_bijdragen$TX_DESCR_NL))), aes(x=date, y=as.numeric(value), fill=TX_DESCR_NL), stat="identity", position="stack") +
+  geom_bar(data = export_bijdragen %>% filter(value < 0) %>% mutate(TX_DESCR_NL = factor(TX_DESCR_NL, levels=rev(latest_top_bijdragen$TX_DESCR_NL))), aes(x=date, y=as.numeric(value), fill=TX_DESCR_NL), stat="identity", position="stack")  +
+  geom_hline(yintercept=0) +
+  theme_minimal() +
+  coord_flip() +
+  theme(legend.position="top")
+
+bijdrage_plot
+
+#ggsave(bijdrage_plot, filename="bijdrage_plot.pdf", width=5, height=9)
+
+export_bijdragen %>% 
+  mutate(TX_DESCR_NL = factor(TX_DESCR_NL, levels=latest_top_bijdragen$TX_DESCR_NL)) %>% 
+  filter(value > 0.001) %>% 
+  ggplot(aes(x=date, y=value * 10)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~TX_DESCR_NL) +
+  theme_minimal() +
+  labs(title="bijdrage van productgroep tot inflatie")
+
 ```
 
